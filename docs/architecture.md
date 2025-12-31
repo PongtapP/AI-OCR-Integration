@@ -1,6 +1,6 @@
 # ⚙️ Technical Architecture & Backend Logic
 
-![System Architecture](..\assets\system_architecture.png)
+![System Architecture](../assets/system_architecture.png)
 
 This document details the internal logic of the Go Middleware, specifically focusing on how we bridge the gap between Unstructured AI output and the Rigid Legacy Database.
 
