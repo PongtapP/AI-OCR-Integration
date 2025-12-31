@@ -102,7 +102,3 @@ To adhere to the "Human-in-the-Loop" philosophy, the backend implements a **Stri
 * **Go (Golang):** Chosen for its performance and strict type system, which is crucial when dealing with messy AI outputs.
 * **Gin Web Framework:** For rapid API development and easy middleware integration.
 * **Mistral AI:** Selected for its high reasoning capability in understanding document layouts compared to traditional OCR.
-
-```
-
-```

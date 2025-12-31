@@ -33,7 +33,7 @@ Direct integration would corrupt the database. A **"Smart Middleware"** was need
 ### System Workflow
 I designed a Go (Gin) middleware acting as an **Adapter Pattern**:
 
-![System Architecture](assets/system_architecture.jpg)
+![System Architecture](assets\system_architecture.png)
 
 ### Key Implementation Details (Backend)
 
@@ -76,5 +76,3 @@ A lightweight, single-file HTML/JS dashboard used to measure AI accuracy against
 
 * **Stack:** Go, Python, JavaScript, Docker, Git.
 * **Interests:** Backend Development, System Architecture, AI Integration.
-
-```
