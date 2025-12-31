@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCR Accuracy & Fill Rate Auditor</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; color: #333; background: #f4f7f6; }
+        
+        /* Header Zone */
+        header { background: #2c3e50; color: white; padding: 15px 25px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        .controls { display: flex; gap: 15px; align-items: center; }
+        
+        /* Main Container Layout */
+        .main-container { display: flex; flex: 1; overflow: hidden; }
+        
+        /* Left: Document View (Independent Scroll) */
+        .doc-zone { flex: 1.2; border-right: 1px solid #dee2e6; overflow: auto; background: #e9ecef; display: flex; justify-content: center; position: relative; }
+        .doc-zone img { max-width: 100%; height: fit-content; box-shadow: 0 4px 15px rgba(0,0,0,0.2); background: white; margin: 20px; }
+        .doc-zone embed { width: 100%; height: 100%; border: none; }
+
+        /* Right: Audit Zone (Independent Scroll) */
+        .audit-zone { flex: 1; overflow-y: auto; padding: 25px; background: white; }
+        .audit-zone h3 { margin-top: 0; border-bottom: 2px solid #f4f7f6; padding-bottom: 10px; color: #2c3e50; }
+        
+        /* Field Rows */
+        .field-row { display: flex; flex-direction: column; gap: 8px; margin-bottom: 15px; padding: 15px; border: 1px solid #edf2f7; border-radius: 8px; background: #fff; transition: all 0.2s; }
+        .field-row:hover { border-color: #cbd5e0; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        .field-header { display: flex; justify-content: space-between; font-weight: bold; font-size: 0.85rem; color: #718096; text-transform: uppercase; }
+        .field-content { display: flex; gap: 10px; align-items: center; }
+        .field-input { flex: 1; padding: 10px; border: 1px solid #e2e8f0; border-radius: 5px; background: #f8fafc; font-size: 1rem; color: #2d3748; }
+        
+        /* Buttons & Actions */
+        .btn-group { display: flex; gap: 8px; }
+        button { cursor: pointer; border: none; padding: 8px 16px; border-radius: 5px; font-weight: bold; transition: 0.2s; }
+        
+        .btn-pass { background: #f0fff4; color: #38a169; border: 1px solid #38a169; }
+        .btn-fail { background: #fff5f5; color: #e53e3e; border: 1px solid #e53e3e; }
+        .active-pass { background: #38a169 !important; color: white !important; }
+        .active-fail { background: #e53e3e !important; color: white !important; }
+        
+        .btn-run { background: #48bb78; color: white; padding: 10px 25px; font-size: 1rem; }
+        .btn-run:disabled { background: #a0aec0; cursor: not-allowed; }
+        .btn-export { background: #3182ce; color: white; padding: 10px 25px; }
+
+        .loader { display: none; color: #48bb78; font-weight: bold; margin-left: 10px; animation: blink 1s infinite; }
+        @keyframes blink { 50% { opacity: 0; } }
+
+        /* Footer Zone */
+        footer { background: white; border-top: 1px solid #e2e8f0; padding: 20px 30px; display: flex; justify-content: space-between; align-items: center; }
+        .metrics-container { display: flex; gap: 40px; }
+        .metric-box { display: flex; flex-direction: column; }
+        .metric-label { font-size: 0.75rem; color: #718096; text-transform: uppercase; font-weight: bold; }
+        .metric-value { font-size: 1.4rem; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div style="font-size: 1.3rem; font-weight: bold;">📑 OCR Audit Tool V4.1</div>
+    <div class="controls">
+        <input type="file" id="fileInput" accept="image/*,application/pdf">
+        <button id="btnRun" class="btn-run">⚡ Run Analysis</button>
+        <div id="loader" class="loader">⏳ Processing...</div>
+    </div>
+</header>
+
+<div class="main-container">
+    <div class="doc-zone" id="docZone">
+        <div style="margin-top: 150px; color: #a0aec0; text-align: center;">
+            <h2>1. Select Document</h2>
+            <p>PDF or Images from your computer</p>
+        </div>
+    </div>
+    
+    <div class="audit-zone" id="auditZone">
+        <div id="fieldsContainer">
+            <p style="color: #a0aec0; text-align: center; margin-top: 100px;">
+                Results will appear here after clicking "Run Analysis"
+            </p>
+        </div>
+    </div>
+</div>
+
+<footer>
+    <div class="metrics-container">
+        <div class="metric-box">
+            <span class="metric-label">Precision (Correctness of Extracted Data)</span>
+            <span class="metric-value" id="statPrecision" style="color: #38a169;">0.00%</span>
+        </div>
+        <div class="metric-box">
+            <span class="metric-label">Fill Rate (Data Coverage)</span>
+            <span class="metric-value" id="statFillRate" style="color: #3182ce;">0.00%</span>
+        </div>
+    </div>
+    <button class="btn-primary" onclick="exportCSV()">🚀 Export Audit Report (CSV)</button>
+</footer>
+
+<script>
+    let currentData = {};
+    let auditResults = {};
+
+    // 1. File Preview Logic (Handles PDF & Images)
+    document.getElementById('fileInput').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            const docZone = document.getElementById('docZone');
+            if (file.type.includes('image')) {
+                docZone.innerHTML = `<img src="${event.target.result}">`;
+            } else if (file.type === 'application/pdf') {
+                docZone.innerHTML = `<embed src="${event.target.result}" type="application/pdf">`;
+            }
+        };
+        reader.readAsDataURL(file);
+    });
+
+    // 2. Call API (Localhost:3000)
+    document.getElementById('btnRun').addEventListener('click', async () => {
+        const fileInput = document.getElementById('fileInput');
+        if (!fileInput.files[0]) return alert("Please select a file first!");
+
+        const btn = document.getElementById('btnRun');
+        const loader = document.getElementById('loader');
+        
+        btn.disabled = true;
+        loader.style.display = 'block';
+        document.getElementById('fieldsContainer').innerHTML = '<p style="text-align:center;">Sending request to Go API...</p>';
+
+        const formData = new FormData();
+        formData.append('document', fileInput.files[0]);
+
+        try {
+            const response = await fetch('http://localhost:3000/api/v4/mistral-smart', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            
+            const result = await response.json();
+            
+            if (result.status === 200) {
+                currentData = result.data;
+                renderFields(currentData);
+            } else {
+                throw new Error(result.message || "Unknown API Error");
+            }
+        } catch (err) {
+            alert("Error: " + err.message + "\n\nMake sure:\n1. Go API is running at Port 3000\n2. 'Allow CORS' extension is ON in Edge");
+            document.getElementById('fieldsContainer').innerHTML = `<p style="color:red; text-align:center;">Connection Failed</p>`;
+        } finally {
+            btn.disabled = false;
+            loader.style.display = 'none';
+        }
+    });
+
+    // 3. Render Audit Rows
+    function renderFields(data) {
+        const container = document.getElementById('fieldsContainer');
+        container.innerHTML = '<h3>🔍 Audit Result</h3>';
+        auditResults = {};
+
+        Object.keys(data).forEach(key => {
+            auditResults[key] = null;
+            
+            // เช็คว่าค่าเป็นค่าว่างหรือไม่ (รวมถึง null และ undefined)
+            const val = data[key] ? String(data[key]).trim() : "";
+            const isDisabled = val === "" || val === "-" || val.toLowerCase() === "null";
+            
+            const row = document.createElement('div');
+            row.className = 'field-row';
+            // ถ้าว่าง ให้ใส่สไตล์จางๆ ไว้ที่แถวด้วย จะได้ข้ามง่ายๆ
+            if (isDisabled) row.style.opacity = "0.5";
+
+            row.innerHTML = `
+                <div class="field-header"><span>${key}</span></div>
+                <div class="field-content">
+                    <input class="field-input" type="text" value="${val}" readonly>
+                    <div class="btn-group">
+                        <button id="p-${key}" class="btn-pass" 
+                            onclick="setAudit('${key}', true)" 
+                            ${isDisabled ? 'disabled style="cursor:not-allowed; opacity:0.3;"' : ''}>✅</button>
+                        <button id="f-${key}" class="btn-fail" 
+                            onclick="setAudit('${key}', false)" 
+                            ${isDisabled ? 'disabled style="cursor:not-allowed; opacity:0.3;"' : ''}>❌</button>
+                    </div>
+                </div>
+            `;
+            container.appendChild(row);
+        });
+        calculateMetrics();
+    }
+
+    // 4. Audit Selection Logic
+    function setAudit(key, isPass) {
+        auditResults[key] = isPass;
+        document.getElementById(`p-${key}`).className = isPass ? 'btn-pass active-pass' : 'btn-pass';
+        document.getElementById(`f-${key}`).className = !isPass ? 'btn-fail active-fail' : 'btn-fail';
+        calculateMetrics();
+    }
+
+    // 5. Accuracy & Fill Rate Calculation
+    function calculateMetrics() {
+        const allKeys = Object.keys(auditResults);
+        
+        // กรองเอาเฉพาะ "ฟิลด์ที่ AI ตอบมาว่ามีข้อมูล" (ไม่เป็นค่าว่าง)
+        const filledKeys = allKeys.filter(k => currentData[k] && String(currentData[k]).trim() !== "");
+        
+        // 1. Precision: (จำนวนที่พี่ติ๊กถูก / จำนวนฟิลด์ทั้งหมดที่ AI ดึงข้อมูลมาได้)
+        const passedCount = filledKeys.filter(k => auditResults[k] === true).length;
+        const totalFilled = filledKeys.length;
+        const precision = totalFilled > 0 ? ((passedCount / totalFilled) * 100).toFixed(2) : 0;
+        
+        // 2. Fill Rate: (จำนวนฟิลด์ที่ดึงได้ / จำนวนฟิลด์ทั้งหมดในโครงสร้าง 42-47 ฟิลด์)
+        const totalExpected = allKeys.length;
+        const fillRate = totalExpected > 0 ? ((totalFilled / totalExpected) * 100).toFixed(2) : 0;
+
+        document.getElementById('statPrecision').innerText = `${precision}% (${passedCount}/${totalFilled})`;
+        document.getElementById('statFillRate').innerText = `${fillRate}% (${totalFilled}/${totalExpected})`;
+    }
+
+    // 6. CSV Export
+    function exportCSV() {
+        if (Object.keys(auditResults).length === 0) return alert("No data to export!");
+        
+        const fileName = document.getElementById('fileInput').files[0]?.name || "unknown";
+        let csv = "\ufeffFilename,Field,Value,Status\n"; // Added BOM for Excel
+        
+        Object.keys(auditResults).forEach(key => {
+            const status = auditResults[key] === true ? "Pass" : (auditResults[key] === false ? "Fail" : "Pending");
+            const val = String(currentData[key]).replace(/"/g, '""');
+            csv += `${fileName},${key},"${val}",${status}\n`;
+        });
+
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `audit_report_${Date.now()}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
+</script>
+
+</body>
+</html>
