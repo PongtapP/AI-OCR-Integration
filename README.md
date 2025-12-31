@@ -33,7 +33,7 @@ Direct integration would corrupt the database. A **"Smart Middleware"** was need
 ### System Workflow
 I designed a Go (Gin) middleware acting as an **Adapter Pattern**:
 
-![System Architecture](assets\system_architecture.png)
+![System Architecture](assets/system_architecture.png)
 
 ### Key Implementation Details (Backend)
 
